@@ -1,0 +1,44 @@
+Nume fisier: test.txt
+dimensiune: 120
+Identificatorul utilizatorului: 1000
+Timpul ultimei modificari: Mon Nov 13 10:02:17 2023
+Contorul de legaturi: 1
+Drepturi usr: RW-
+Drepturi grp: RW-
+Drepturi others: RW-
+
+Nume fisier: C.txt
+dimensiune: 7
+Identificatorul utilizatorului: 1000
+Timpul ultimei modificari: Mon Nov 13 12:08:47 2023
+Contorul de legaturi: 1
+Drepturi usr: RW-
+Drepturi grp: RW-
+Drepturi others: RW-
+
+Nume fisier: imagine.bmp
+Inaltime: 1280
+Lungime: 1920
+dimensiune: 7372938
+Identificatorul utilizatorului: 1000
+Timpul ultimei modificari: Mon Nov 13 09:38:01 2023
+Contorul de legaturi: 1
+Drepturi usr: RW-
+Drepturi grp: RW-
+Drepturi others: RW-
+
+Nume fisier: A.txt
+dimensiune: 7
+Identificatorul utilizatorului: 1000
+Timpul ultimei modificari: Mon Nov 13 12:08:47 2023
+Contorul de legaturi: 1
+Drepturi usr: RW-
+Drepturi grp: RW-
+Drepturi others: RW-
+
+Nume director: director1
+Identificatorul utilizatorului: 1000
+Drepturi usr: RWX
+Drepturi grp: RWX
+Drepturi others: RWX
+

@@ -3,20 +3,27 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <stdbool.h>
+#include <time.h>
+#include <dirent.h>
+#include <unistd.h>
+#define BUFSIZE 1024
 
 
 typedef struct Img {
-    char numeFisier[20];
-    int inaltime;
-    int lungime;
-    int dimensiune;
-    char usrID[10];
-    char lastEdit[10];
+    char fileName[20];
+    int height;
+    int width;
+    int size;
+    int usrID;
+    time_t lastEdit;
     int count;
-    char acUsr[3];
-    char acGrp[3];
-    char acAltii[3];
+    char acUsr[4];
+    char acGrp[4];
+    char acOthers[4];
 }Img;
+
+Img imagine;
 
 char *getFileType(char *filename) {
     char *dot = strrchr(filename, '.');
@@ -24,11 +31,144 @@ char *getFileType(char *filename) {
     return dot + 1;
 }
 
+char *getFileFromDir(char *filename) {
+    char *dot = strrchr(filename, '/');
+    if (!dot || dot == filename) return "";
+    return dot + 1;
+}
+
+bool isBMP(char *filename) {
+    if (strcmp(getFileType(filename), "bmp") == 0) return 1;
+    return 0;
+}
+
+void readBMPInfo(char *filename) {
+    int fis = open(filename, O_RDONLY);
+    if (fis == -1) perror("Eroare la deschidere fisier");
+
+    int rd;
+    char buff[BUFSIZE];
+    rd = read(fis, buff, BUFSIZE);
+    if (rd < BUFSIZE) perror("Eroare la citirea header-ului");
+    memcpy(&imagine.width, buff + 18, 4);
+    memcpy(&imagine.height, buff + 22, 4);
+
+}
+
+DIR *openDir(char *dir) {
+    DIR *d = opendir(dir);
+    if (d == NULL) perror("Eroare la deschidere fisier!");
+    return d;
+}
+
+void printToFile(char *file, char *content) {
+    int fd = open(file, O_WRONLY | O_CREAT | O_APPEND);
+    if (fd == -1) {
+        perror("Eroare la deschidere fisier");
+    }
+    if (write(fd, content, strlen(content)) == -1) {
+        perror("Eroare la scriere");
+        close(fd);
+    }
+    close(fd);
+}
+
+void processEntry(char *file) {
+    struct stat fileStat;
+    if (stat(file, &fileStat) == -1) perror("Eroare la stat");
+    char buffer[1024];
+    if (S_ISREG(fileStat.st_mode)) {
+        if (isBMP(file)) {
+            //Fisier BMP
+            readBMPInfo(file);
+            sprintf(buffer, "Nume fisier: %s\nInaltime: %d\nLungime: %d\n"
+                            "dimensiune: %ld\nIdentificatorul utilizatorului: %d\n"
+                            "Timpul ultimei modificari: %sContorul de legaturi: %ld\n"
+                            "Drepturi usr: %c%c%c\n"
+                            "Drepturi grp: %c%c%c\n"
+                            "Drepturi others: %c%c%c\n\n", getFileFromDir(file), imagine.height, imagine.width, fileStat.st_size, fileStat.st_uid, ctime(&fileStat.st_mtime),
+                            fileStat.st_nlink,
+                            (fileStat.st_mode & S_IRUSR) ? 'R' : '-',
+                    (fileStat.st_mode & S_IWUSR) ? 'W' : '-',
+                    (fileStat.st_mode & S_IXUSR) ? 'X' : '-',
+                    (fileStat.st_mode & S_IRGRP) ? 'R' : '-',
+                    (fileStat.st_mode & S_IWGRP) ? 'W' : '-',
+                    (fileStat.st_mode & S_IXGRP) ? 'X' : '-',
+                    (fileStat.st_mode & S_IROTH) ? 'R' : '-',
+                    (fileStat.st_mode & S_IWOTH) ? 'W' : '-',
+                    (fileStat.st_mode & S_IXOTH) ? 'X' : '-');
+        } else {
+            //Fisier fara .bmp
+            sprintf(buffer, "Nume fisier: %s\n"
+                            "dimensiune: %ld\nIdentificatorul utilizatorului: %d\n"
+                            "Timpul ultimei modificari: %sContorul de legaturi: %ld\n"
+                            "Drepturi usr: %c%c%c\n"
+                            "Drepturi grp: %c%c%c\n"
+                            "Drepturi others: %c%c%c\n\n", getFileFromDir(file), fileStat.st_size, fileStat.st_uid, ctime(&fileStat.st_mtime),
+                    fileStat.st_nlink,
+                    (fileStat.st_mode & S_IRUSR) ? 'R' : '-',
+                    (fileStat.st_mode & S_IWUSR) ? 'W' : '-',
+                    (fileStat.st_mode & S_IXUSR) ? 'X' : '-',
+                    (fileStat.st_mode & S_IRGRP) ? 'R' : '-',
+                    (fileStat.st_mode & S_IWGRP) ? 'W' : '-',
+                    (fileStat.st_mode & S_IXGRP) ? 'X' : '-',
+                    (fileStat.st_mode & S_IROTH) ? 'R' : '-',
+                    (fileStat.st_mode & S_IWOTH) ? 'W' : '-',
+                    (fileStat.st_mode & S_IXOTH) ? 'X' : '-');
+        }
+    } else if(S_ISLNK(fileStat.st_mode)) {
+        //Legatura simbolica
+        char targetPath[BUFSIZE];
+        if (readlink(file, targetPath, sizeof(targetPath) - 1) == -1) perror("Eroare la citire legatura simbolica");
+
+        sprintf(buffer, "Nume legatura: %s->%s\nDimensiune legatura:%ld\nDimensiune fisier:%ld"
+                        "Drepturi usr: %c%c%c\n"
+                        "Drepturi grp: %c%c%c\n"
+                        "Drepturi others: %c%c%c\n\n", file, targetPath, fileStat.st_size, fileStat.st_size,
+                    (fileStat.st_mode & S_IRUSR) ? 'R' : '-',
+                    (fileStat.st_mode & S_IWUSR) ? 'W' : '-',
+                    (fileStat.st_mode & S_IXUSR) ? 'X' : '-',
+                    (fileStat.st_mode & S_IRGRP) ? 'R' : '-',
+                    (fileStat.st_mode & S_IWGRP) ? 'W' : '-',
+                    (fileStat.st_mode & S_IXGRP) ? 'X' : '-',
+                    (fileStat.st_mode & S_IROTH) ? 'R' : '-',
+                    (fileStat.st_mode & S_IWOTH) ? 'W' : '-',
+                    (fileStat.st_mode & S_IXOTH) ? 'X' : '-');
+    } else if(S_ISDIR(fileStat.st_mode)) {
+        sprintf(buffer,"Nume director: %s\nIdentificatorul utilizatorului: %d\n"
+        "Drepturi usr: %c%c%c\n"
+        "Drepturi grp: %c%c%c\n"
+        "Drepturi others: %c%c%c\n\n", getFileFromDir(file), fileStat.st_uid,
+                (fileStat.st_mode & S_IRUSR) ? 'R' : '-',
+                (fileStat.st_mode & S_IWUSR) ? 'W' : '-',
+                (fileStat.st_mode & S_IXUSR) ? 'X' : '-',
+                (fileStat.st_mode & S_IRGRP) ? 'R' : '-',
+                (fileStat.st_mode & S_IWGRP) ? 'W' : '-',
+                (fileStat.st_mode & S_IXGRP) ? 'X' : '-',
+                (fileStat.st_mode & S_IROTH) ? 'R' : '-',
+                (fileStat.st_mode & S_IWOTH) ? 'W' : '-',
+                (fileStat.st_mode & S_IXOTH) ? 'X' : '-');
+    }
+    printToFile("statistica.txt", buffer);
+
+}
 
 int main(int argc, char* argv[]) {
-    struct stat fisType;
-    if (argc != 2) perror("Numar de argumente gresit!");
-    stat(argv[1], &fisType);
-    printf("%F\n", fisType.st_mode);
+    char *dirIn = argv[1];
+    if (argc != 2) perror("Eroare la argumentul primit!");
+    DIR *dir = openDir(dirIn);
+    if (dir == NULL) perror("Eroare la deschiderea directorului");
+    struct dirent *entry;
+    chmod("statistica.txt", 0666);
+    while ((entry = readdir(dir)) != NULL) {
+        if (!strcmp (entry->d_name, "."))
+            continue;
+        if (!strcmp (entry->d_name, ".."))
+            continue;
+        char entryPath[1024];
+        sprintf(entryPath, "%s/%s", dirIn, entry->d_name);
+        processEntry(entryPath);
+    }
+    closedir(dir);
     return 0;
 }
