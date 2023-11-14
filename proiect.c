@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <fcntl.h>
 #include <string.h>
 #include <sys/types.h>
@@ -7,7 +8,7 @@
 #include <time.h>
 #include <dirent.h>
 #include <unistd.h>
-#define BUFSIZE 1024
+#define BUFSIZE 2048
 
 
 typedef struct Img {
@@ -52,32 +53,34 @@ void readBMPInfo(char *filename) {
     if (rd < BUFSIZE) perror("Eroare la citirea header-ului");
     memcpy(&imagine.width, buff + 18, 4);
     memcpy(&imagine.height, buff + 22, 4);
-
+    close(fis);
 }
 
 DIR *openDir(char *dir) {
     DIR *d = opendir(dir);
     if (d == NULL) perror("Eroare la deschidere fisier!");
     return d;
+    closedir(d);
 }
 
 void printToFile(char *file, char *content) {
     int fd = open(file, O_WRONLY | O_CREAT | O_APPEND);
     if (fd == -1) {
         perror("Eroare la deschidere fisier");
+        close(fd);
+        exit(-1);
     }
+
     if (write(fd, content, strlen(content)) == -1) {
         perror("Eroare la scriere");
         close(fd);
+        exit(-1);
     }
     close(fd);
 }
 
-void processEntry(char *file) {
-    struct stat fileStat;
-    if (stat(file, &fileStat) == -1) perror("Eroare la stat");
-    char buffer[1024];
-    if (S_ISREG(fileStat.st_mode)) {
+
+void fileInfo(char *file, char *buffer, struct stat fileStat) {
         if (isBMP(file)) {
             //Fisier BMP
             readBMPInfo(file);
@@ -116,15 +119,21 @@ void processEntry(char *file) {
                     (fileStat.st_mode & S_IWOTH) ? 'W' : '-',
                     (fileStat.st_mode & S_IXOTH) ? 'X' : '-');
         }
-    } else if(S_ISLNK(fileStat.st_mode)) {
-        //Legatura simbolica
-        char targetPath[BUFSIZE];
-        if (readlink(file, targetPath, sizeof(targetPath) - 1) == -1) perror("Eroare la citire legatura simbolica");
+}
 
-        sprintf(buffer, "Nume legatura: %s->%s\nDimensiune legatura:%ld\nDimensiune fisier:%ld"
+void linkInfo(char *file, char *buffer, struct stat fileStat) {
+        //Legatura simbolica
+        char targetPath[1024];
+        int bytesRead = readlink(file, targetPath, sizeof(targetPath) - 1);
+        struct stat targetStat;
+        if (stat(file, &targetStat) == -1) perror("Eroare la targetStat");
+        if (bytesRead == -1) perror("Eroare la citire legatura simbolica");
+        targetPath[bytesRead] = '\0';
+    
+        sprintf(buffer, "Nume legatura: %s->%s\nDimensiune legatura: %ld\nDimensiune fisier: %ld\n"
                         "Drepturi usr: %c%c%c\n"
                         "Drepturi grp: %c%c%c\n"
-                        "Drepturi others: %c%c%c\n\n", file, targetPath, fileStat.st_size, fileStat.st_size,
+                        "Drepturi others: %c%c%c\n\n", file, targetPath, fileStat.st_size, targetStat.st_size,
                     (fileStat.st_mode & S_IRUSR) ? 'R' : '-',
                     (fileStat.st_mode & S_IWUSR) ? 'W' : '-',
                     (fileStat.st_mode & S_IXUSR) ? 'X' : '-',
@@ -134,7 +143,9 @@ void processEntry(char *file) {
                     (fileStat.st_mode & S_IROTH) ? 'R' : '-',
                     (fileStat.st_mode & S_IWOTH) ? 'W' : '-',
                     (fileStat.st_mode & S_IXOTH) ? 'X' : '-');
-    } else if(S_ISDIR(fileStat.st_mode)) {
+}
+
+void dirInfo(char *file, char* buffer, struct stat fileStat) {
         sprintf(buffer,"Nume director: %s\nIdentificatorul utilizatorului: %d\n"
         "Drepturi usr: %c%c%c\n"
         "Drepturi grp: %c%c%c\n"
@@ -149,6 +160,22 @@ void processEntry(char *file) {
                 (fileStat.st_mode & S_IWOTH) ? 'W' : '-',
                 (fileStat.st_mode & S_IXOTH) ? 'X' : '-');
     }
+
+void processEntry(char *file) {
+    struct stat fileStat;
+    if (lstat(file, &fileStat) == -1) perror("Eroare la stat");
+    char buffer[BUFSIZE];
+
+    if (S_ISREG(fileStat.st_mode)) {
+        fileInfo(file, buffer, fileStat);
+
+    } else if(S_ISLNK(fileStat.st_mode)) {
+        linkInfo(file, buffer, fileStat);
+
+    } else if(S_ISDIR(fileStat.st_mode)) {
+        dirInfo(file, buffer, fileStat);
+    }
+
     printToFile("statistica.txt", buffer);
 
 }
@@ -169,6 +196,5 @@ int main(int argc, char* argv[]) {
         sprintf(entryPath, "%s/%s", dirIn, entry->d_name);
         processEntry(entryPath);
     }
-    closedir(dir);
     return 0;
 }

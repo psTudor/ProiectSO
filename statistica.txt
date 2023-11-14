@@ -7,14 +7,12 @@ Drepturi usr: RW-
 Drepturi grp: RW-
 Drepturi others: RW-
 
-Nume fisier: C.txt
-dimensiune: 7
-Identificatorul utilizatorului: 1000
-Timpul ultimei modificari: Mon Nov 13 12:08:47 2023
-Contorul de legaturi: 1
-Drepturi usr: RW-
-Drepturi grp: RW-
-Drepturi others: RW-
+Nume legatura: testDir/C.txt->A.txt
+Dimensiune legatura: 5
+Dimensiune fisier: 7
+Drepturi usr: RWX
+Drepturi grp: RWX
+Drepturi others: RWX
 
 Nume fisier: imagine.bmp
 Inaltime: 1280
