@@ -4,6 +4,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <stdbool.h>
 #include <time.h>
 #include <dirent.h>
@@ -64,7 +65,7 @@ DIR *openDir(char *dir) {
 }
 
 void printToFile(char *file, char *content) {
-    int fd = open(file, O_WRONLY | O_CREAT | O_APPEND);
+    int fd = open(file, O_WRONLY | O_CREAT | O_TRUNC);
     if (fd == -1) {
         perror("Eroare la deschidere fisier");
         close(fd);
@@ -79,6 +80,25 @@ void printToFile(char *file, char *content) {
     close(fd);
 }
 
+int countLines(char *file) {
+    int fd = open(file, O_RDONLY);
+        if (fd == -1) {
+        perror("Eroare la deschiderea fisierului");
+        exit(EXIT_FAILURE);
+    }
+    int count = 0;
+    int rd;
+    char buff[1024];
+    while ((rd = read(fd, buff, sizeof(buff))) > 0 ) {
+        for (int i = 0; i < rd; i++) {
+            count++;
+        }
+    }
+    close(fd);
+    return count;
+}
+
+int lines = 0;
 
 void fileInfo(char *file, char *buffer, struct stat fileStat) {
         if (isBMP(file)) {
@@ -118,6 +138,7 @@ void fileInfo(char *file, char *buffer, struct stat fileStat) {
                     (fileStat.st_mode & S_IROTH) ? 'R' : '-',
                     (fileStat.st_mode & S_IWOTH) ? 'W' : '-',
                     (fileStat.st_mode & S_IXOTH) ? 'X' : '-');
+            
         }
 }
 
@@ -161,40 +182,54 @@ void dirInfo(char *file, char* buffer, struct stat fileStat) {
                 (fileStat.st_mode & S_IXOTH) ? 'X' : '-');
     }
 
-void processEntry(char *file) {
+void processEntry(char *file, char *dirOut) {
     struct stat fileStat;
     if (lstat(file, &fileStat) == -1) perror("Eroare la stat");
     char buffer[BUFSIZE];
+    char outPath[256];
+    sprintf(outPath, "%s/%s_statistica.txt", dirOut, getFileFromDir(file));
 
     if (S_ISREG(fileStat.st_mode)) {
         fileInfo(file, buffer, fileStat);
-
     } else if(S_ISLNK(fileStat.st_mode)) {
         linkInfo(file, buffer, fileStat);
-
     } else if(S_ISDIR(fileStat.st_mode)) {
         dirInfo(file, buffer, fileStat);
     }
 
-    printToFile("statistica.txt", buffer);
+    lines += countLines(buffer);
+    printToFile(outPath, buffer);
 
 }
 
 int main(int argc, char* argv[]) {
     char *dirIn = argv[1];
-    if (argc != 2) perror("Eroare la argumentul primit!");
+    char *dirOut = argv[2];
+    if (argc != 3) perror("Eroare la argumentul primit!");
     DIR *dir = openDir(dirIn);
     if (dir == NULL) perror("Eroare la deschiderea directorului");
+
     struct dirent *entry;
-    chmod("statistica.txt", 0666);
     while ((entry = readdir(dir)) != NULL) {
         if (!strcmp (entry->d_name, "."))
             continue;
         if (!strcmp (entry->d_name, ".."))
             continue;
-        char entryPath[1024];
+        char entryPath[BUFSIZE];
         sprintf(entryPath, "%s/%s", dirIn, entry->d_name);
-        processEntry(entryPath);
+
+        int pid = fork();
+        if (pid < 0) {
+            perror("Eroare la pid");
+            exit(-1);
+        }
+        if (pid == 0) {
+            processEntry(entryPath, dirOut);
+            exit(EXIT_SUCCESS);
+        }
     }
+    while (wait(NULL) > 0);
+    printf("%d\n", lines);
+    closedir(dir);
     return 0;
 }

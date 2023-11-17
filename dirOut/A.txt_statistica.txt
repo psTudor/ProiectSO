@@ -1,0 +1,9 @@
+Nume fisier: A.txt
+dimensiune: 7
+Identificatorul utilizatorului: 1000
+Timpul ultimei modificari: Fri Nov 17 09:47:43 2023
+Contorul de legaturi: 1
+Drepturi usr: RW-
+Drepturi grp: RW-
+Drepturi others: R--
+
