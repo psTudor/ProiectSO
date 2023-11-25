@@ -13,16 +13,8 @@
 
 
 typedef struct Img {
-    char fileName[20];
     int height;
     int width;
-    int size;
-    int usrID;
-    time_t lastEdit;
-    int count;
-    char acUsr[4];
-    char acGrp[4];
-    char acOthers[4];
 }Img;
 
 Img imagine;
@@ -45,16 +37,49 @@ bool isBMP(char *filename) {
 }
 
 void readBMPInfo(char *filename) {
-    int fis = open(filename, O_RDONLY);
-    if (fis == -1) perror("Eroare la deschidere fisier");
+    int fd = open(filename, O_RDONLY);
+    if (fd == -1) perror("Eroare la deschidere bmp");
 
     int rd;
     char buff[BUFSIZE];
-    rd = read(fis, buff, BUFSIZE);
-    if (rd < BUFSIZE) perror("Eroare la citirea header-ului");
+    rd = read(fd, buff, BUFSIZE);
+    if (rd < 0) perror("Eroare la citirea header-ului");
     memcpy(&imagine.width, buff + 18, 4);
     memcpy(&imagine.height, buff + 22, 4);
-    close(fis);
+    close(fd);
+}
+
+void convertPixelsToGrey(char *filename) {
+    int fd = open(filename, O_RDWR);
+    if (fd == -1) {
+        perror("Eroare la deschidere bmp");
+        exit(EXIT_FAILURE);
+    }
+
+    Img imgInfo;
+    lseek(fd, 18, SEEK_SET);
+    if (read(fd, &imgInfo.width, sizeof(int)) < 0 || read(fd, &imgInfo.height, sizeof(int)) < 0) {
+        perror("Eroare la citirea dimensiunilor imaginii");
+        exit(EXIT_FAILURE);
+    }
+
+    lseek(fd, 54, SEEK_SET);
+
+    char pixel[3];
+    for (int i = 0; i < imgInfo.width * imgInfo.height; i++) {
+        if (read(fd, pixel, sizeof(char) * 3) < 0) {
+            perror("Eroare la citire pixel");
+            exit(EXIT_FAILURE);
+        }
+
+        unsigned char P_gri = 0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2];
+        pixel[0] = pixel[1] = pixel[2] = P_gri;
+
+        if (write(fd, pixel, sizeof(char) * 3) < 0) {
+            perror("Eroare la scriere pixeli");
+            exit(EXIT_FAILURE);
+        }
+    }
 }
 
 DIR *openDir(char *dir) {
@@ -97,8 +122,6 @@ int countLines(char *file) {
     close(fd);
     return count;
 }
-
-int lines = 0;
 
 void fileInfo(char *file, char *buffer, struct stat fileStat) {
         if (isBMP(file)) {
@@ -196,8 +219,6 @@ void processEntry(char *file, char *dirOut) {
     } else if(S_ISDIR(fileStat.st_mode)) {
         dirInfo(file, buffer, fileStat);
     }
-
-    lines += countLines(buffer);
     printToFile(outPath, buffer);
 
 }
@@ -223,13 +244,16 @@ int main(int argc, char* argv[]) {
             perror("Eroare la pid");
             exit(-1);
         }
-        if (pid == 0) {
-            processEntry(entryPath, dirOut);
-            exit(EXIT_SUCCESS);
+        if (pid == 0) { //proces copil
+            exit(-1);
+        } 
+        //procesc parinte
+        if (isBMP(entryPath)) {
+            convertPixelsToGrey(entryPath);
         }
+        processEntry(entryPath, dirOut);
     }
     while (wait(NULL) > 0);
-    printf("%d\n", lines);
     closedir(dir);
     return 0;
 }
