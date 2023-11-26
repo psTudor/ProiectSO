@@ -239,19 +239,36 @@ int main(int argc, char* argv[]) {
         char entryPath[BUFSIZE];
         sprintf(entryPath, "%s/%s", dirIn, entry->d_name);
 
-        int pid = fork();
-        if (pid < 0) {
-            perror("Eroare la pid");
+        int pid_statistica = fork();
+        int status;
+        if (pid_statistica < 0) {
+            perror("Eroare la pid statistica");
             exit(-1);
         }
-        if (pid == 0) { //proces copil
+
+        if (pid_statistica == 0) { //proces copil pid_statistica
             exit(-1);
-        } 
-        //procesc parinte
-        if (isBMP(entryPath)) {
-            convertPixelsToGrey(entryPath);
-        }
-        processEntry(entryPath, dirOut);
+
+        } else { 
+            //proces parinte pid_statistica
+            int pid_pixeli = fork();
+            if (pid_pixeli < 0) {
+                perror("Eroare la pid pixeli");
+                exit(-1);
+            }
+
+            if (pid_pixeli == 0) { //proces copil pid_pixeli
+                if (isBMP(entryPath)) {
+                    convertPixelsToGrey(entryPath);
+                }
+                exit(-1);
+
+            } else { //proces parinte pid_pixeli
+                waitpid(pid_pixeli, &status, 0);
+                printf("S-a încheiat procesul cu pid-ul %d și codul %d\n", pid_pixeli, WEXITSTATUS(status));
+            }
+            processEntry(entryPath, dirOut);
+            }
     }
     while (wait(NULL) > 0);
     closedir(dir);
