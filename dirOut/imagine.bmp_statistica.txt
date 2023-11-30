@@ -1,9 +1,9 @@
 Nume fisier: imagine.bmp
 Inaltime: 1280
 Lungime: 1920
-dimensiune: 7372938
+dimensiune: 14745654
 Identificatorul utilizatorului: 1000
-Timpul ultimei modificari: Fri Nov 17 09:47:43 2023
+Timpul ultimei modificari: Thu Nov 30 15:16:20 2023
 Contorul de legaturi: 1
 Drepturi usr: RW-
 Drepturi grp: RW-

@@ -25,9 +25,9 @@ char *getFileType(char *filename) {
     return dot + 1;
 }
 
-char *getFileFromDir(char *filename) {
-    char *dot = strrchr(filename, '/');
-    if (!dot || dot == filename) return "";
+char *getFilenameFromDir(char *dirname) {
+    char *dot = strrchr(dirname, '/');
+    if (!dot || dot == dirname) return "";
     return dot + 1;
 }
 
@@ -48,6 +48,7 @@ void readBMPInfo(char *filename) {
     memcpy(&imagine.height, buff + 22, 4);
     close(fd);
 }
+
 
 void convertPixelsToGrey(char *filename) {
     int fd = open(filename, O_RDWR);
@@ -116,7 +117,9 @@ int countLines(char *file) {
     char buff[1024];
     while ((rd = read(fd, buff, sizeof(buff))) > 0 ) {
         for (int i = 0; i < rd; i++) {
-            count++;
+            if (buff[i] == '\n') {
+                count++;
+            }
         }
     }
     close(fd);
@@ -132,7 +135,7 @@ void fileInfo(char *file, char *buffer, struct stat fileStat) {
                             "Timpul ultimei modificari: %sContorul de legaturi: %ld\n"
                             "Drepturi usr: %c%c%c\n"
                             "Drepturi grp: %c%c%c\n"
-                            "Drepturi others: %c%c%c\n\n", getFileFromDir(file), imagine.height, imagine.width, fileStat.st_size, fileStat.st_uid, ctime(&fileStat.st_mtime),
+                            "Drepturi others: %c%c%c\n\n", getFilenameFromDir(file), imagine.height, imagine.width, fileStat.st_size, fileStat.st_uid, ctime(&fileStat.st_mtime),
                             fileStat.st_nlink,
                             (fileStat.st_mode & S_IRUSR) ? 'R' : '-',
                     (fileStat.st_mode & S_IWUSR) ? 'W' : '-',
@@ -150,7 +153,7 @@ void fileInfo(char *file, char *buffer, struct stat fileStat) {
                             "Timpul ultimei modificari: %sContorul de legaturi: %ld\n"
                             "Drepturi usr: %c%c%c\n"
                             "Drepturi grp: %c%c%c\n"
-                            "Drepturi others: %c%c%c\n\n", getFileFromDir(file), fileStat.st_size, fileStat.st_uid, ctime(&fileStat.st_mtime),
+                            "Drepturi others: %c%c%c\n\n", getFilenameFromDir(file), fileStat.st_size, fileStat.st_uid, ctime(&fileStat.st_mtime),
                     fileStat.st_nlink,
                     (fileStat.st_mode & S_IRUSR) ? 'R' : '-',
                     (fileStat.st_mode & S_IWUSR) ? 'W' : '-',
@@ -193,7 +196,7 @@ void dirInfo(char *file, char* buffer, struct stat fileStat) {
         sprintf(buffer,"Nume director: %s\nIdentificatorul utilizatorului: %d\n"
         "Drepturi usr: %c%c%c\n"
         "Drepturi grp: %c%c%c\n"
-        "Drepturi others: %c%c%c\n\n", getFileFromDir(file), fileStat.st_uid,
+        "Drepturi others: %c%c%c\n\n", getFilenameFromDir(file), fileStat.st_uid,
                 (fileStat.st_mode & S_IRUSR) ? 'R' : '-',
                 (fileStat.st_mode & S_IWUSR) ? 'W' : '-',
                 (fileStat.st_mode & S_IXUSR) ? 'X' : '-',
@@ -205,13 +208,19 @@ void dirInfo(char *file, char* buffer, struct stat fileStat) {
                 (fileStat.st_mode & S_IXOTH) ? 'X' : '-');
     }
 
+
+int count;
+
 void processEntry(char *file, char *dirOut) {
     struct stat fileStat;
-    if (lstat(file, &fileStat) == -1) perror("Eroare la stat");
+    if (lstat(file, &fileStat) == -1) {
+        perror("Eroare la stat");
+        exit(-1);
+    }
     char buffer[BUFSIZE];
     char outPath[256];
-    sprintf(outPath, "%s/%s_statistica.txt", dirOut, getFileFromDir(file));
-
+    sprintf(outPath, "%s/%s_statistica.txt", dirOut, getFilenameFromDir(file));
+    
     if (S_ISREG(fileStat.st_mode)) {
         fileInfo(file, buffer, fileStat);
     } else if(S_ISLNK(fileStat.st_mode)) {
@@ -220,8 +229,9 @@ void processEntry(char *file, char *dirOut) {
         dirInfo(file, buffer, fileStat);
     }
     printToFile(outPath, buffer);
-
+    count = countLines(outPath);
 }
+
 
 int main(int argc, char* argv[]) {
     char *dirIn = argv[1];
@@ -229,8 +239,10 @@ int main(int argc, char* argv[]) {
     if (argc != 3) perror("Eroare la argumentul primit!");
     DIR *dir = openDir(dirIn);
     if (dir == NULL) perror("Eroare la deschiderea directorului");
-
+    
     struct dirent *entry;
+    int pfd[2];
+
     while ((entry = readdir(dir)) != NULL) {
         if (!strcmp (entry->d_name, "."))
             continue;
@@ -238,39 +250,63 @@ int main(int argc, char* argv[]) {
             continue;
         char entryPath[BUFSIZE];
         sprintf(entryPath, "%s/%s", dirIn, entry->d_name);
+        processEntry(entryPath, dirOut);
 
-        int pid_statistica = fork();
-        int status;
-        if (pid_statistica < 0) {
-            perror("Eroare la pid statistica");
-            exit(-1);
+
+    if (pipe(pfd) < 0) {
+        perror("Eroare la pipe");
+        exit(-1);
+    }
+
+    int pid_statistica = fork();
+    if (pid_statistica < 0) {
+        perror("Eroare la pid statistica");
+        exit(-1);
+    }
+
+    if (pid_statistica == 0) { //proces fiu pid_statistica
+        close(pfd[0]);
+        if (write(pfd[1], &count, sizeof(count)) < 0) {
+            perror("Eroare la scriere in pipe");
+            exit(EXIT_FAILURE);
+        }
+        close(pfd[1]);
+        exit(EXIT_SUCCESS);
+    }
+
+    else { //parinte
+        int lines;
+        close(pfd[1]);
+        if (read(pfd[0], &lines, sizeof(lines)) < 0) {
+            perror("Eroare la citire pipe");
+            exit(EXIT_FAILURE);           
         }
 
-        if (pid_statistica == 0) { //proces copil pid_statistica
-            exit(-1);
+        printf("Numarul de linii este %d\n", lines);
+        close(pfd[0]);
+    }
 
-        } else { 
-            //proces parinte pid_statistica
+        if (isBMP(entryPath)) {
             int pid_pixeli = fork();
             if (pid_pixeli < 0) {
-                perror("Eroare la pid pixeli");
+                perror("Eroare la pid statistica");
                 exit(-1);
             }
-
-            if (pid_pixeli == 0) { //proces copil pid_pixeli
-                if (isBMP(entryPath)) {
-                    convertPixelsToGrey(entryPath);
-                }
+            if (pid_pixeli ==  0) { //proces fiu pid_pixeli
+                convertPixelsToGrey(entryPath);
                 exit(-1);
-
-            } else { //proces parinte pid_pixeli
-                waitpid(pid_pixeli, &status, 0);
-                printf("S-a încheiat procesul cu pid-ul %d și codul %d\n", pid_pixeli, WEXITSTATUS(status));
             }
-            processEntry(entryPath, dirOut);
+            int pidf, status;
+            if ((pidf = wait(&status)) < 0) {
+                perror("Eroare la wait");
+                exit(-1);
             }
+            if (WIFEXITED(status)) {
+                printf("S-a încheiat procesul cu pid-ul %d și codul %d\n", pidf, WEXITSTATUS(status));
+            }
+        }
     }
-    while (wait(NULL) > 0);
+    //while (wait(NULL) > 0);
     closedir(dir);
     return 0;
 }
