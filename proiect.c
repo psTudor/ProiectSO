@@ -209,8 +209,6 @@ void dirInfo(char *file, char* buffer, struct stat fileStat) {
     }
 
 
-int count;
-
 void processEntry(char *file, char *dirOut) {
     struct stat fileStat;
     if (lstat(file, &fileStat) == -1) {
@@ -229,28 +227,44 @@ void processEntry(char *file, char *dirOut) {
         dirInfo(file, buffer, fileStat);
     }
     printToFile(outPath, buffer);
-    count = countLines(outPath);
 }
 
+void fileContent(char *file, char *buffer) {
+    int fd = open(file, O_RDONLY);
+
+    if (fd < 0) {
+        perror("Eroare la deschidere fisier");
+        exit(EXIT_FAILURE);
+    }
+    int rd;
+    if ((rd = read(fd, buffer, sizeof(buffer))) < 0) {
+        perror("Eroare la sciere in buffer");
+        exit(EXIT_FAILURE);
+    }
+}
 
 int main(int argc, char* argv[]) {
     char *dirIn = argv[1];
     char *dirOut = argv[2];
-    if (argc != 3) perror("Eroare la argumentul primit!");
+    char *c = argv[3];
+    if (argc != 4) perror("Eroare la argumentul primit!");
     DIR *dir = openDir(dirIn);
     if (dir == NULL) perror("Eroare la deschiderea directorului");
     
     struct dirent *entry;
     int pfd[2];
+    char bufferWrite[BUFSIZE];
+    char bufferRead[BUFSIZE];
+    char entryPath[BUFSIZE];
 
     while ((entry = readdir(dir)) != NULL) {
         if (!strcmp (entry->d_name, "."))
             continue;
         if (!strcmp (entry->d_name, ".."))
             continue;
-        char entryPath[BUFSIZE];
         sprintf(entryPath, "%s/%s", dirIn, entry->d_name);
         processEntry(entryPath, dirOut);
+        fileContent(entryPath, bufferWrite);
 
 
     if (pipe(pfd) < 0) {
@@ -263,27 +277,35 @@ int main(int argc, char* argv[]) {
         perror("Eroare la pid statistica");
         exit(-1);
     }
-
-    if (pid_statistica == 0) { //proces fiu pid_statistica
-        close(pfd[0]);
-        if (write(pfd[1], &count, sizeof(count)) < 0) {
-            perror("Eroare la scriere in pipe");
-            exit(EXIT_FAILURE);
+    if (!isBMP(entryPath)) {
+        if (pid_statistica == 0) { //proces fiu pid_statistica
+            close(pfd[0]);
+            if (write(pfd[1], bufferWrite, sizeof(bufferWrite)) < 0) {
+                perror("Eroare la scriere in pipe");
+                exit(EXIT_FAILURE);
+            }
+            close(pfd[1]);
+            exit(EXIT_SUCCESS);
         }
-        close(pfd[1]);
-        exit(EXIT_SUCCESS);
-    }
+        
+        else { //parinte
+            int pid_filtru = fork();
+            if (pid_filtru < 0) {
+                perror("Eroare la pid filtru");
+                exit(EXIT_FAILURE);
+            }
 
-    else { //parinte
-        int lines;
-        close(pfd[1]);
-        if (read(pfd[0], &lines, sizeof(lines)) < 0) {
-            perror("Eroare la citire pipe");
-            exit(EXIT_FAILURE);           
+            if (pid_filtru == 0) {
+                close(pfd[1]);
+                if ((read(pfd[0], bufferRead, sizeof(bufferRead))) < 0) {
+                    perror("Eroare la citire din pipe");
+                    exit(EXIT_FAILURE);
+                }
+                execlp("bash", "bash", "script.sh", c, NULL);
+                close(pfd[0]);
+                exit(EXIT_SUCCESS);
+            }
         }
-
-        printf("Numarul de linii este %d\n", lines);
-        close(pfd[0]);
     }
 
         if (isBMP(entryPath)) {
@@ -306,7 +328,6 @@ int main(int argc, char* argv[]) {
             }
         }
     }
-    //while (wait(NULL) > 0);
     closedir(dir);
     return 0;
 }
