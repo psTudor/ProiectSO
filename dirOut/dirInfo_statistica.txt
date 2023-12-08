@@ -1,0 +1,6 @@
+Nume director: dirInfo
+Identificatorul utilizatorului: 1000
+Drepturi usr: RWX
+Drepturi grp: RWX
+Drepturi others: R-X
+

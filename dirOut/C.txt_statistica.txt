@@ -1,6 +1,6 @@
 Nume legatura: testDir/C.txt->A.txt
 Dimensiune legatura: 5
-Dimensiune fisier: 12
+Dimensiune fisier: 39
 Drepturi usr: RWX
 Drepturi grp: RWX
 Drepturi others: RWX

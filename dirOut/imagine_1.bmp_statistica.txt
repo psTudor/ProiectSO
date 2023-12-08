@@ -3,7 +3,7 @@ Inaltime: 467
 Lungime: 467
 dimensiune: 1308588
 Identificatorul utilizatorului: 1000
-Timpul ultimei modificari: Thu Nov 30 15:16:17 2023
+Timpul ultimei modificari: Fri Dec  8 17:27:32 2023
 Contorul de legaturi: 1
 Drepturi usr: RW-
 Drepturi grp: RW-

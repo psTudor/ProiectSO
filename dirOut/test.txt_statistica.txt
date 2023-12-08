@@ -1,7 +1,7 @@
 Nume fisier: test.txt
-dimensiune: 120
+dimensiune: 74
 Identificatorul utilizatorului: 1000
-Timpul ultimei modificari: Fri Nov 17 09:47:43 2023
+Timpul ultimei modificari: Fri Dec  8 12:45:57 2023
 Contorul de legaturi: 1
 Drepturi usr: RW-
 Drepturi grp: RW-
