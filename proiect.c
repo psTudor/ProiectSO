@@ -95,13 +95,13 @@ void printToFile(char *file, char *content) {
     if (fd == -1) {
         perror("Eroare la deschidere fisier");
         close(fd);
-        exit(-1);
+        exit(EXIT_FAILURE);
     }
 
     if (write(fd, content, strlen(content)) == -1) {
         perror("Eroare la scriere");
         close(fd);
-        exit(-1);
+        exit(EXIT_FAILURE);
     }
     close(fd);
 }
@@ -213,18 +213,18 @@ void processEntry(char *file, char *dirOut) {
     struct stat fileStat;
     if (lstat(file, &fileStat) == -1) {
         perror("Eroare la stat");
-        exit(-1);
+        exit(EXIT_FAILURE);
     }
     char buffer[BUFSIZE];
     char outPath[256];
     sprintf(outPath, "%s/%s_statistica.txt", dirOut, getFilenameFromDir(file));
     
     if (S_ISREG(fileStat.st_mode)) {
-        fileInfo(file, buffer, fileStat);
+        fileInfo(file, buffer, fileStat); //functie care scrie detalii despre fisier normal sau .bmp
     } else if(S_ISLNK(fileStat.st_mode)) {
-        linkInfo(file, buffer, fileStat);
+        linkInfo(file, buffer, fileStat); //functie care scrie detalii despre legatura simbolica
     } else if(S_ISDIR(fileStat.st_mode)) {
-        dirInfo(file, buffer, fileStat);
+        dirInfo(file, buffer, fileStat);  //functie care scrie detalii despre un director
     }
     printToFile(outPath, buffer);
 }
@@ -248,7 +248,6 @@ void fileContent(char *file, char *buffer) {
         perror("Eroare la sciere in buffer");
         exit(EXIT_FAILURE);
     }
-    //printf("File Content:%s\n", buffer);
 }
 
 int main(int argc, char* argv[]) {
@@ -266,6 +265,7 @@ int main(int argc, char* argv[]) {
     char bufferWrite[BUFSIZE];
     char bufferRead[500];
     char entryPath[BUFSIZE];
+    struct stat fileStat;
 
     while ((entry = readdir(dir)) != NULL) {
         if (!strcmp (entry->d_name, "."))
@@ -274,26 +274,31 @@ int main(int argc, char* argv[]) {
             continue;
         sprintf(entryPath, "%s/%s", dirIn, entry->d_name);
 
+        if (lstat(entryPath, &fileStat) == -1) {
+            perror("Eroare la stat");
+            exit(EXIT_FAILURE);
+        }
+
         if (pipe(pfd_ff) < 0) {
             perror("Eroare la pipe");
-            exit(-1);
+            exit(EXIT_FAILURE);
         }
 
 
         if (pipe(pfd_fp) < 0) {
             perror("Eroare la pipe");
-            exit(-1);
+            exit(EXIT_FAILURE);
         }
 
         int pid = fork();
         if (pid < 0) {
             perror("Eroare la pid statistica");
-            exit(-1);
+            exit(EXIT_FAILURE);
         }
 
-        if (!isBMP(entryPath)) {
+        if (!isBMP(entryPath) && !S_ISDIR(fileStat.st_mode)) {
             if (pid == 0) { //proces fiu statistica
-                processEntry(entryPath, dirOut);
+                processEntry(entryPath, dirOut); //functie care creeaza fisierul de statistica in directorul de iesire
                 fileContent(entryPath, bufferWrite);
 
                 close(pfd_ff[0]);
@@ -307,11 +312,11 @@ int main(int argc, char* argv[]) {
                 exit(EXIT_SUCCESS);
             }
 
-            //proces printe
+            //proces printe statistica
             waitpid(pid, NULL, 0);
             if ((pid = fork()) < 0) {
-            perror("Eroare la pid statistica");
-            exit(-1);
+                perror("Eroare la pid statistica");
+                exit(EXIT_FAILURE);
             }
 
             if (pid == 0) { //fiu propozitii corecte
@@ -328,7 +333,8 @@ int main(int argc, char* argv[]) {
                 perror("Eroare la execlp");
                 exit(EXIT_FAILURE);
             }
-            //proces parinte
+
+            //proces parinte propozitii
             close(pfd_ff[0]);
             close(pfd_ff[1]);
             close(pfd_fp[1]);
@@ -342,19 +348,20 @@ int main(int argc, char* argv[]) {
         }
 
         if (isBMP(entryPath)) {
+            processEntry(entryPath, dirOut);
             int pid_pixeli = fork();
             if (pid_pixeli < 0) {
                 perror("Eroare la pid statistica");
-                exit(-1);
+                exit(EXIT_FAILURE);
             }
             if (pid_pixeli ==  0) { //proces fiu pid_pixeli
                 convertPixelsToGrey(entryPath);
-                exit(-1);
+                exit(EXIT_SUCCESS);
             }
             int pidf, status;
             if ((pidf = wait(&status)) < 0) {
                 perror("Eroare la wait");
-                exit(-1);
+                exit(EXIT_FAILURE);
             }
             if (WIFEXITED(status)) {
                 printf("S-a încheiat procesul cu pid-ul %d și codul %d\n", pidf, WEXITSTATUS(status));
