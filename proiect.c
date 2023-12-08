@@ -229,6 +229,12 @@ void processEntry(char *file, char *dirOut) {
     printToFile(outPath, buffer);
 }
 
+int getFileSize(int fd) {
+    int fileSize = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+    return fileSize;
+}
+
 void fileContent(char *file, char *buffer) {
     int fd = open(file, O_RDONLY);
 
@@ -236,25 +242,29 @@ void fileContent(char *file, char *buffer) {
         perror("Eroare la deschidere fisier");
         exit(EXIT_FAILURE);
     }
+    int size = getFileSize(fd);
     int rd;
-    if ((rd = read(fd, buffer, sizeof(buffer))) < 0) {
+    if ((rd = read(fd, buffer, size)) < 0) {
         perror("Eroare la sciere in buffer");
         exit(EXIT_FAILURE);
     }
+    //printf("File Content:%s\n", buffer);
 }
 
 int main(int argc, char* argv[]) {
     char *dirIn = argv[1];
     char *dirOut = argv[2];
-    char *c = argv[3];
+    char c[2];
+    strcpy(c, argv[3]);
     if (argc != 4) perror("Eroare la argumentul primit!");
     DIR *dir = openDir(dirIn);
     if (dir == NULL) perror("Eroare la deschiderea directorului");
     
     struct dirent *entry;
-    int pfd[2];
+    int pfd_ff[2]; // pipe de la fiu la fiu
+    int pfd_fp[2]; // pipe de la fiu la parinte
     char bufferWrite[BUFSIZE];
-    char bufferRead[BUFSIZE];
+    char bufferRead[500];
     char entryPath[BUFSIZE];
 
     while ((entry = readdir(dir)) != NULL) {
@@ -263,50 +273,73 @@ int main(int argc, char* argv[]) {
         if (!strcmp (entry->d_name, ".."))
             continue;
         sprintf(entryPath, "%s/%s", dirIn, entry->d_name);
-        processEntry(entryPath, dirOut);
-        fileContent(entryPath, bufferWrite);
 
-
-    if (pipe(pfd) < 0) {
-        perror("Eroare la pipe");
-        exit(-1);
-    }
-
-    int pid_statistica = fork();
-    if (pid_statistica < 0) {
-        perror("Eroare la pid statistica");
-        exit(-1);
-    }
-    if (!isBMP(entryPath)) {
-        if (pid_statistica == 0) { //proces fiu pid_statistica
-            close(pfd[0]);
-            if (write(pfd[1], bufferWrite, sizeof(bufferWrite)) < 0) {
-                perror("Eroare la scriere in pipe");
-                exit(EXIT_FAILURE);
-            }
-            close(pfd[1]);
-            exit(EXIT_SUCCESS);
+        if (pipe(pfd_ff) < 0) {
+            perror("Eroare la pipe");
+            exit(-1);
         }
-        
-        else { //parinte
-            int pid_filtru = fork();
-            if (pid_filtru < 0) {
-                perror("Eroare la pid filtru");
-                exit(EXIT_FAILURE);
-            }
 
-            if (pid_filtru == 0) {
-                close(pfd[1]);
-                if ((read(pfd[0], bufferRead, sizeof(bufferRead))) < 0) {
-                    perror("Eroare la citire din pipe");
+
+        if (pipe(pfd_fp) < 0) {
+            perror("Eroare la pipe");
+            exit(-1);
+        }
+
+        int pid = fork();
+        if (pid < 0) {
+            perror("Eroare la pid statistica");
+            exit(-1);
+        }
+
+        if (!isBMP(entryPath)) {
+            if (pid == 0) { //proces fiu statistica
+                processEntry(entryPath, dirOut);
+                fileContent(entryPath, bufferWrite);
+
+                close(pfd_ff[0]);
+                close(pfd_fp[0]);
+                close(pfd_fp[1]);
+                if (write(pfd_ff[1], bufferWrite, sizeof(bufferWrite)) < 0) {
+                    perror("Eroare la scriere in pipe");
                     exit(EXIT_FAILURE);
                 }
-                execlp("bash", "bash", "script.sh", c, NULL);
-                close(pfd[0]);
+                close(pfd_ff[1]);
                 exit(EXIT_SUCCESS);
             }
+
+            //proces printe
+            waitpid(pid, NULL, 0);
+            if ((pid = fork()) < 0) {
+            perror("Eroare la pid statistica");
+            exit(-1);
+            }
+
+            if (pid == 0) { //fiu propozitii corecte
+                close(pfd_ff[1]);
+                close(pfd_fp[0]);
+
+                dup2(pfd_ff[0], 0);
+                dup2(pfd_fp[1], 1);
+
+                close(pfd_ff[0]);
+                close(pfd_fp[1]);
+
+                execlp("sh", "sh", "script.sh", c, (char *)NULL);
+                perror("Eroare la execlp");
+                exit(EXIT_FAILURE);
+            }
+            //proces parinte
+            close(pfd_ff[0]);
+            close(pfd_ff[1]);
+            close(pfd_fp[1]);
+            waitpid(pid, NULL, 0);
+            if ((read(pfd_fp[0], bufferRead, sizeof(bufferRead))) < 0) {
+                perror("Eroare la citire din pipe");
+                exit(EXIT_FAILURE);   
+            }
+            printf("%s in fisierul %s\n", bufferRead, getFilenameFromDir(entryPath));
+            close(pfd_fp[0]);
         }
-    }
 
         if (isBMP(entryPath)) {
             int pid_pixeli = fork();
